@@ -1,4 +1,4 @@
-﻿/*
+/*
 
 SQL Server Maintenance Solution - SQL Server 2005, SQL Server 2008, SQL Server 2008 R2, SQL Server 2012, SQL Server 2014, SQL Server 2016, and SQL Server 2017
 
@@ -25,6 +25,8 @@ SET NOCOUNT ON
 
 DECLARE @CreateJobs nvarchar(max)
 DECLARE @BackupDirectory nvarchar(max)
+DECLARE @Url nvarchar(max)
+DECLARE @Credential nvarchar(max)
 DECLARE @CleanupTime int
 DECLARE @OutputFileDirectory nvarchar(max)
 DECLARE @LogToTable nvarchar(max)
@@ -32,6 +34,8 @@ DECLARE @ErrorMessage nvarchar(max)
 
 SET @CreateJobs          = 'Y'          -- Specify whether jobs should be created.
 SET @BackupDirectory     = NULL         -- Specify the backup root directory. If no directory is specified, the default backup directory is used.
+SET @Url                 = NULL         -- Specify the backup URL
+SET @Credential          = NULL         -- Specify the Credential to be used with the backup URL.
 SET @CleanupTime         = NULL         -- Time in hours, after which backup files are deleted. If no time is specified, then no backup files are deleted.
 SET @OutputFileDirectory = NULL         -- Specify the output file directory. If no directory is specified, then the SQL Server error log directory is used.
 SET @LogToTable          = 'Y'          -- Log commands to a table.
@@ -55,6 +59,8 @@ CREATE TABLE #Config ([Name] nvarchar(max),
 
 INSERT INTO #Config ([Name], [Value]) VALUES('CreateJobs', @CreateJobs)
 INSERT INTO #Config ([Name], [Value]) VALUES('BackupDirectory', @BackupDirectory)
+INSERT INTO #Config ([Name], [Value]) VALUES('Url', @Url)
+INSERT INTO #Config ([Name], [Value]) VALUES('Credential', @Credential)
 INSERT INTO #Config ([Name], [Value]) VALUES('CleanupTime', @CleanupTime)
 INSERT INTO #Config ([Name], [Value]) VALUES('OutputFileDirectory', @OutputFileDirectory)
 INSERT INTO #Config ([Name], [Value]) VALUES('LogToTable', @LogToTable)
@@ -7352,6 +7358,8 @@ IF (SELECT [Value] FROM #Config WHERE Name = 'CreateJobs') = 'Y' AND SERVERPROPE
 BEGIN
 
   DECLARE @BackupDirectory nvarchar(max)
+  DECLARE @Url nvarchar(max)
+  DECLARE @Credential nvarchar(max)
   DECLARE @CleanupTime int
   DECLARE @OutputFileDirectory nvarchar(max)
   DECLARE @LogToTable nvarchar(max)
@@ -7442,6 +7450,14 @@ BEGIN
   FROM #Config
   WHERE [Name] = 'BackupDirectory'
 
+  SELECT @Url = Value
+  FROM #Config
+  WHERE [Name] = 'Url'
+  
+  SELECT @Credential = Value
+  FROM #Config
+  WHERE [Name] = 'Credential'
+
   IF @HostPlatform = 'Windows'
   BEGIN
     SELECT @CleanupTime = Value
@@ -7491,28 +7507,28 @@ BEGIN
 
   INSERT INTO @Jobs ([Name], CommandTSQL, DatabaseName, OutputFileNamePart01, OutputFileNamePart02)
   SELECT 'DatabaseBackup - SYSTEM_DATABASES - FULL',
-         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''SYSTEM_DATABASES'',' + CHAR(13) + CHAR(10) + '@Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''FULL'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
+         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''SYSTEM_DATABASES'',' + CHAR(13) + CHAR(10) + CASE WHEN @Url IS NULL THEN ' @Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') ELSE ' @Url = ''' + @Url + '''' END + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''FULL'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
          @DatabaseName,
          'DatabaseBackup',
          'FULL'
 
   INSERT INTO @Jobs ([Name], CommandTSQL, DatabaseName, OutputFileNamePart01, OutputFileNamePart02)
   SELECT 'DatabaseBackup - USER_DATABASES - DIFF',
-         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + '@Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''DIFF'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
+         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + CASE WHEN @Url IS NULL THEN ' @Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') ELSE ' @Url = ''' + @Url + '''' END + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''DIFF'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
           @DatabaseName,
          'DatabaseBackup',
          'DIFF'
 
   INSERT INTO @Jobs ([Name], CommandTSQL, DatabaseName, OutputFileNamePart01, OutputFileNamePart02)
   SELECT 'DatabaseBackup - USER_DATABASES - FULL',
-         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + '@Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''FULL'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
+         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + CASE WHEN @Url IS NULL THEN ' @Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') ELSE ' @Url = ''' + @Url + '''' END + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''FULL'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
          @DatabaseName,
          'DatabaseBackup',
          'FULL'
 
   INSERT INTO @Jobs ([Name], CommandTSQL, DatabaseName, OutputFileNamePart01, OutputFileNamePart02)
   SELECT 'DatabaseBackup - USER_DATABASES - LOG',
-         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + '@Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''LOG'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
+         'EXECUTE [dbo].[DatabaseBackup]' + CHAR(13) + CHAR(10) + '@Databases = ''USER_DATABASES'',' + CHAR(13) + CHAR(10) + CASE WHEN @Url IS NULL THEN ' @Directory = ' + ISNULL('N''' + REPLACE(@BackupDirectory,'''','''''') + '''','NULL') ELSE ' @Url = ''' + @Url + '''' END + ',' + CHAR(13) + CHAR(10) + '@BackupType = ''LOG'',' + CHAR(13) + CHAR(10) + '@Verify = ''Y'',' + CHAR(13) + CHAR(10) + '@CleanupTime = ' + ISNULL(CAST(@CleanupTime AS nvarchar),'NULL') + ',' + CHAR(13) + CHAR(10) + '@CheckSum = ''Y'',' + CHAR(13) + CHAR(10) + '@LogToTable = ''' + @LogToTable + '''',
          @DatabaseName,
          'DatabaseBackup',
          'LOG'
